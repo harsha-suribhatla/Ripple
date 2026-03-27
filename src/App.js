@@ -1,12 +1,27 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
 
 const TMDB_TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI0YzgyNWRkYWNhYTM2ZDU3NjYwYzVlMDUyMzU5MzgyMyIsIm5iZiI6MTc3NDU5MjA4MS4zMjksInN1YiI6IjY5YzYyMDUxMzk2NDYxMWNkMTA4YTkyMyIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.Q3gdXBGb7-dzla3lIT2raHJy8ZweNX0taKO2EWO-s4s";
+
+const supabase = createClient(
+  "https://ukqyhergomfqhzvqznjp.supabase.co",
+  "sb_publishable_bDTEMEaJzcKE_LuIQGk_jA_zBEFhx0p"
+);
 
 function App() {
   const [queue, setQueue] = useState([]);
   const [input, setInput] = useState("");
   const [recommender, setRecommender] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    loadQueue();
+  }, []);
+
+  async function loadQueue() {
+    const { data } = await supabase.from("queue").select("*").order("created_at", { ascending: false });
+    if (data) setQueue(data);
+  }
 
   async function addToQueue() {
     if (input === "") return;
@@ -19,16 +34,15 @@ function App() {
     const data = await response.json();
     const result = data.results[0];
 
-    if (result) {
-      setQueue([...queue, {
-        title: result.title || result.name,
-        description: result.overview,
-        poster: `https://image.tmdb.org/t/p/w200${result.poster_path}`,
-        from: recommender
-      }]);
-    } else {
-      setQueue([...queue, { title: input, description: "No info found", poster: null, from: recommender }]);
-    }
+    const item = {
+      title: result?.title || result?.name || input,
+      description: result?.overview || "No info found",
+      poster: result?.poster_path ? `https://image.tmdb.org/t/p/w200${result.poster_path}` : null,
+      recommender: recommender
+    };
+
+    await supabase.from("queue").insert([item]);
+    await loadQueue();
 
     setInput("");
     setRecommender("");
@@ -58,17 +72,17 @@ function App() {
           onClick={addToQueue}
           style={{ padding: "12px", borderRadius: "8px", background: "#1A56DB", color: "white", border: "none", fontSize: "16px", cursor: "pointer" }}
         >
-          {loading ? "Searching..." : "Add to Queue"}
+          {loading ? "Adding..." : "Add to Queue"}
         </button>
       </div>
 
-      {queue.map((item, i) => (
-        <div key={i} style={{ display: "flex", gap: "16px", padding: "16px", borderRadius: "10px", border: "1px solid #eee", marginBottom: "12px" }}>
+      {queue.map((item) => (
+        <div key={item.id} style={{ display: "flex", gap: "16px", padding: "16px", borderRadius: "10px", border: "1px solid #eee", marginBottom: "12px" }}>
           {item.poster && <img src={item.poster} alt={item.title} style={{ width: "60px", borderRadius: "6px" }} />}
           <div>
             <div style={{ fontWeight: "bold", fontSize: "16px" }}>{item.title}</div>
             <div style={{ fontSize: "13px", color: "gray", margin: "4px 0" }}>{item.description?.slice(0, 100)}...</div>
-            {item.from && <div style={{ fontSize: "12px", color: "#1A56DB" }}>via {item.from}</div>}
+            {item.recommender && <div style={{ fontSize: "12px", color: "#1A56DB" }}>via {item.recommender}</div>}
           </div>
         </div>
       ))}
