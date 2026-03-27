@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-const TMDB_TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI0YzgyNWRkYWNhYTM2ZDU3NjYwYzVlMDUyMzU5MzgyMyIsIm5iZiI6MTc3NDU5MjA4MS4zMjksInN1YiI6IjY5YzYyMDUxMzk2NDYxMWNkMTA4YTkyMyIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.Q3gdXBGb7-dzla3lIT2raHJy8ZweNX0taKO2EWO-s4s";
+const TMDB_TOKEN = process.env.REACT_APP_TMDB_TOKEN;
 
 const supabase = createClient(
-  "https://ukqyhergomfqhzvqznjp.supabase.co",
-  "sb_publishable_bDTEMEaJzcKE_LuIQGk_jA_zBEFhx0p"
+  process.env.REACT_APP_SUPABASE_URL,
+  process.env.REACT_APP_SUPABASE_KEY
 );
 
 function App() {
@@ -96,7 +96,6 @@ function App() {
         </button>
       </div>
 
-      {/* Tabs */}
       <div style={{ display: "flex", gap: "8px", marginBottom: "20px" }}>
         <button
           onClick={() => setTab("queue")}
