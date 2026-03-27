@@ -10,17 +10,25 @@ const supabase = createClient(
 
 function App() {
   const [queue, setQueue] = useState([]);
+  const [watched, setWatched] = useState([]);
   const [input, setInput] = useState("");
   const [recommender, setRecommender] = useState("");
   const [loading, setLoading] = useState(false);
+  const [tab, setTab] = useState("queue");
 
   useEffect(() => {
     loadQueue();
   }, []);
 
   async function loadQueue() {
-    const { data } = await supabase.from("queue").select("*").order("created_at", { ascending: false });
-    if (data) setQueue(data);
+    const { data } = await supabase
+      .from("queue")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (data) {
+      setQueue(data.filter(i => !i.watched));
+      setWatched(data.filter(i => i.watched));
+    }
   }
 
   async function addToQueue() {
@@ -38,16 +46,28 @@ function App() {
       title: result?.title || result?.name || input,
       description: result?.overview || "No info found",
       poster: result?.poster_path ? `https://image.tmdb.org/t/p/w200${result.poster_path}` : null,
-      recommender: recommender
+      recommender: recommender,
+      watched: false
     };
 
     await supabase.from("queue").insert([item]);
     await loadQueue();
-
     setInput("");
     setRecommender("");
     setLoading(false);
   }
+
+  async function markWatched(id) {
+    await supabase.from("queue").update({ watched: true }).eq("id", id);
+    await loadQueue();
+  }
+
+  async function markUnwatched(id) {
+    await supabase.from("queue").update({ watched: false }).eq("id", id);
+    await loadQueue();
+  }
+
+  const activeList = tab === "queue" ? queue : watched;
 
   return (
     <div style={{ maxWidth: "600px", margin: "0 auto", padding: "40px 20px", fontFamily: "sans-serif" }}>
@@ -76,14 +96,45 @@ function App() {
         </button>
       </div>
 
-      {queue.map((item) => (
-        <div key={item.id} style={{ display: "flex", gap: "16px", padding: "16px", borderRadius: "10px", border: "1px solid #eee", marginBottom: "12px" }}>
+      {/* Tabs */}
+      <div style={{ display: "flex", gap: "8px", marginBottom: "20px" }}>
+        <button
+          onClick={() => setTab("queue")}
+          style={{ padding: "8px 20px", borderRadius: "20px", border: "none", cursor: "pointer", background: tab === "queue" ? "#1A56DB" : "#f1f1f1", color: tab === "queue" ? "white" : "black", fontWeight: "bold" }}
+        >
+          Queue ({queue.length})
+        </button>
+        <button
+          onClick={() => setTab("watched")}
+          style={{ padding: "8px 20px", borderRadius: "20px", border: "none", cursor: "pointer", background: tab === "watched" ? "#1A56DB" : "#f1f1f1", color: tab === "watched" ? "white" : "black", fontWeight: "bold" }}
+        >
+          Watched ({watched.length})
+        </button>
+      </div>
+
+      {activeList.map((item) => (
+        <div key={item.id} style={{ display: "flex", gap: "16px", padding: "16px", borderRadius: "10px", border: "1px solid #eee", marginBottom: "12px", alignItems: "center" }}>
           {item.poster && <img src={item.poster} alt={item.title} style={{ width: "60px", borderRadius: "6px" }} />}
-          <div>
+          <div style={{ flex: 1 }}>
             <div style={{ fontWeight: "bold", fontSize: "16px" }}>{item.title}</div>
             <div style={{ fontSize: "13px", color: "gray", margin: "4px 0" }}>{item.description?.slice(0, 100)}...</div>
             {item.recommender && <div style={{ fontSize: "12px", color: "#1A56DB" }}>via {item.recommender}</div>}
           </div>
+          {tab === "queue" ? (
+            <button
+              onClick={() => markWatched(item.id)}
+              style={{ padding: "8px 12px", borderRadius: "8px", background: "#ECFDF5", color: "#065F46", border: "none", cursor: "pointer", fontSize: "13px", fontWeight: "bold", whiteSpace: "nowrap" }}
+            >
+              ✓ Watched
+            </button>
+          ) : (
+            <button
+              onClick={() => markUnwatched(item.id)}
+              style={{ padding: "8px 12px", borderRadius: "8px", background: "#f1f1f1", color: "gray", border: "none", cursor: "pointer", fontSize: "13px", whiteSpace: "nowrap" }}
+            >
+              ↩ Unwatch
+            </button>
+          )}
         </div>
       ))}
 
