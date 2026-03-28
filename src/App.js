@@ -88,6 +88,16 @@ async function fetchProviders(tmdbId, mediaType) {
   return platforms;
 }
 
+async function fetchSimilar(tmdbId, mediaType) {
+  if (!tmdbId || !mediaType) return [];
+  const res = await fetch(
+    `https://api.themoviedb.org/3/${mediaType}/${tmdbId}/similar`,
+    { headers: { Authorization: `Bearer ${TMDB_TOKEN}` } }
+  );
+  const data = await res.json();
+  return (data.results || []).slice(0, 3);
+}
+
 function App() {
   const [queue, setQueue] = useState([]);
   const [watched, setWatched] = useState([]);
@@ -96,6 +106,8 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState("queue");
   const [providers, setProviders] = useState({});
+  const [modal, setModal] = useState(null);
+  const [similarProviders, setSimilarProviders] = useState({});
 
   useEffect(() => {
     loadQueue();
@@ -169,13 +181,41 @@ function App() {
     setLoading(false);
   }
 
-  async function markWatched(id) {
-    await supabase.from("queue").update({ watched: true }).eq("id", id);
+  async function markWatched(item) {
+    await supabase.from("queue").update({ watched: true }).eq("id", item.id);
     await loadQueue();
+
+    if (item.tmdb_id && item.media_type) {
+      const similar = await fetchSimilar(item.tmdb_id, item.media_type);
+      const provResults = {};
+      await Promise.all(similar.map(async (s) => {
+        const mediaType = item.media_type;
+        const platforms = await fetchProviders(s.id, mediaType);
+        provResults[s.id] = platforms;
+      }));
+      setSimilarProviders(provResults);
+      setModal({ watchedTitle: item.title, similar, mediaType: item.media_type });
+    }
   }
 
   async function markUnwatched(id) {
     await supabase.from("queue").update({ watched: false }).eq("id", id);
+    await loadQueue();
+  }
+
+  async function addSimilarToQueue(s, mediaType) {
+    const genre = getGenre(s.genre_ids);
+    const item = {
+      title: s.title || s.name,
+      description: s.overview || "No info found",
+      poster: s.poster_path ? `https://image.tmdb.org/t/p/w200${s.poster_path}` : null,
+      recommender: "Ripple",
+      watched: false,
+      genre: genre,
+      tmdb_id: s.id,
+      media_type: mediaType,
+    };
+    await supabase.from("queue").insert([item]);
     await loadQueue();
   }
 
@@ -261,7 +301,7 @@ function App() {
               </div>
               {tab === "queue" ? (
                 <button
-                  onClick={() => markWatched(item.id)}
+                  onClick={() => markWatched(item)}
                   style={{ padding: "8px 12px", borderRadius: "8px", background: "#ECFDF5", color: "#065F46", border: "none", cursor: "pointer", fontSize: "13px", fontWeight: "bold", whiteSpace: "nowrap" }}
                 >
                   ✓ Watched
@@ -278,6 +318,54 @@ function App() {
           ))}
         </div>
       ))}
+
+      {modal && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+          <div style={{ background: "white", borderRadius: "16px", padding: "32px", maxWidth: "500px", width: "90%", maxHeight: "80vh", overflowY: "auto" }}>
+            <h2 style={{ fontSize: "20px", marginBottom: "4px" }}>✅ Marked as Watched!</h2>
+            <p style={{ color: "gray", marginBottom: "20px", fontSize: "14px" }}>Since you watched <strong>{modal.watchedTitle}</strong>, you might also like:</p>
+
+            {modal.similar.map((s) => (
+              <div key={s.id} style={{ display: "flex", gap: "12px", padding: "12px", borderRadius: "10px", border: "1px solid #eee", marginBottom: "12px", alignItems: "flex-start" }}>
+                {s.poster_path && <img src={`https://image.tmdb.org/t/p/w200${s.poster_path}`} alt={s.title || s.name} style={{ width: "50px", borderRadius: "6px" }} />}
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: "bold", fontSize: "15px" }}>{s.title || s.name}</div>
+                  <div style={{ fontSize: "12px", color: "gray", margin: "4px 0" }}>{s.overview?.slice(0, 80)}...</div>
+                  {similarProviders[s.id] && similarProviders[s.id].length > 0 && (
+                    <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", marginTop: "4px" }}>
+                      {similarProviders[s.id].map(platform => (
+                        <span key={platform} style={{
+                          padding: "2px 8px",
+                          borderRadius: "12px",
+                          fontSize: "10px",
+                          fontWeight: "bold",
+                          background: PLATFORM_COLORS[platform]?.bg || "#333",
+                          color: PLATFORM_COLORS[platform]?.color || "#fff"
+                        }}>
+                          {platform}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => addSimilarToQueue(s, modal.mediaType)}
+                  style={{ padding: "6px 10px", borderRadius: "8px", background: "#1A56DB", color: "white", border: "none", cursor: "pointer", fontSize: "12px", whiteSpace: "nowrap" }}
+                >
+                  + Add
+                </button>
+              </div>
+            ))}
+
+            <button
+              onClick={() => setModal(null)}
+              style={{ width: "100%", padding: "12px", borderRadius: "8px", background: "#f1f1f1", border: "none", cursor: "pointer", fontSize: "15px", marginTop: "8px" }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
     </div>
   );
