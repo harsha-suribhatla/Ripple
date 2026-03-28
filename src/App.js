@@ -96,6 +96,7 @@ function App() {
   const [tab, setTab] = useState("queue");
   const [providers, setProviders] = useState({});
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     loadQueue();
   }, []);
