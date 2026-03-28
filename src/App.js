@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 
@@ -96,7 +97,6 @@ function App() {
   const [tab, setTab] = useState("queue");
   const [providers, setProviders] = useState({});
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     loadQueue();
   }, []);
