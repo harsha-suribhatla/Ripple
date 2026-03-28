@@ -50,9 +50,30 @@ const PLATFORM_COLORS = {
   "Max": { bg: "#002BE7", color: "#fff" },
   "Hulu": { bg: "#1CE783", color: "#000" },
   "Disney+": { bg: "#113CCF", color: "#fff" },
-  "Apple TV+": { bg: "#000", color: "#fff" },
+  "Apple TV+": { bg: "#555", color: "#fff" },
   "Amazon Prime Video": { bg: "#00A8E1", color: "#fff" },
   "Paramount+": { bg: "#0064FF", color: "#fff" },
+};
+
+const PLATFORM_BAR_COLORS = {
+  "Peacock": "#6366f1",
+  "Netflix": "#E50914",
+  "Max": "#002BE7",
+  "Hulu": "#1CE783",
+  "Disney+": "#113CCF",
+  "Apple TV+": "#555",
+  "Amazon Prime Video": "#00A8E1",
+  "Paramount+": "#0064FF",
+};
+
+const SOURCE_COLORS = {
+  "TikTok": "#ff0050",
+  "YouTube": "#FF0000",
+  "Instagram": "#E1306C",
+  "Twitter": "#1DA1F2",
+  "Reddit": "#FF4500",
+  "Snapchat": "#FFFC00",
+  "Facebook": "#1877F2",
 };
 
 const PROVIDER_NAME_MAP = {
@@ -109,10 +130,53 @@ async function fetchSimilar(tmdbId, mediaType) {
   return (data.results || []).slice(0, 3);
 }
 
-function InsightsTab({ allItems, providers }) {
+function StatCard({ emoji, label, value, sub, color }) {
+  return (
+    <div style={{ flex: 1, minWidth: "120px", background: "#fff", borderRadius: "14px", padding: "16px", border: "1px solid #eee", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
+      <div style={{ fontSize: "22px", marginBottom: "6px" }}>{emoji}</div>
+      <div style={{ fontSize: "11px", color: "gray", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "4px" }}>{label}</div>
+      <div style={{ fontSize: "22px", fontWeight: "800", color: color || "#111" }}>{value}</div>
+      {sub && <div style={{ fontSize: "11px", color: "gray", marginTop: "2px" }}>{sub}</div>}
+    </div>
+  );
+}
+
+function BarChart({ data, colorMap, total }) {
+  if (!data || data.length === 0) return null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+      {data.map(([name, count]) => (
+        <div key={name}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", marginBottom: "3px" }}>
+            <span style={{ fontWeight: "600" }}>{name}</span>
+            <span style={{ color: "gray" }}>{count} ({Math.round((count / total) * 100)}%)</span>
+          </div>
+          <div style={{ background: "#f1f1f1", borderRadius: "99px", height: "8px", overflow: "hidden" }}>
+            <div style={{
+              width: `${(count / total) * 100}%`,
+              height: "100%",
+              borderRadius: "99px",
+              background: colorMap?.[name] || "#1A56DB",
+              transition: "width 0.5s ease"
+            }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function InsightsTab({ allItems, providers, queue, watched }) {
   const peopleMap = {};
+  const sourceCounts = {};
+  const platformCounts = {};
+  const genreCounts = {};
 
   for (let item of allItems) {
+    if (item.genre) {
+      genreCounts[item.genre] = (genreCounts[item.genre] || 0) + 1;
+    }
+
     if (!item.recommender || item.recommender === "Ripple") continue;
     const name = item.recommender;
     if (!peopleMap[name]) {
@@ -123,102 +187,122 @@ function InsightsTab({ allItems, providers }) {
     const source = detectSource(name);
     if (source) {
       peopleMap[name].sources[source] = (peopleMap[name].sources[source] || 0) + 1;
+      sourceCounts[source] = (sourceCounts[source] || 0) + 1;
     }
 
     const itemPlatforms = providers[item.id] || [];
     for (let p of itemPlatforms) {
       peopleMap[name].platforms[p] = (peopleMap[name].platforms[p] || 0) + 1;
-    }
-  }
-
-  const sorted = Object.entries(peopleMap).sort((a, b) => b[1].count - a[1].count);
-
-  const sourceCounts = {};
-  const platformCounts = {};
-  for (let item of allItems) {
-    if (item.recommender === "Ripple") continue;
-    const source = detectSource(item.recommender || "");
-    if (source) sourceCounts[source] = (sourceCounts[source] || 0) + 1;
-    for (let p of (providers[item.id] || [])) {
       platformCounts[p] = (platformCounts[p] || 0) + 1;
     }
   }
 
-  const topSource = Object.entries(sourceCounts).sort((a, b) => b[1] - a[1])[0];
-  const topPlatform = Object.entries(platformCounts).sort((a, b) => b[1] - a[1])[0];
+  const sorted = Object.entries(peopleMap).sort((a, b) => b[1].count - a[1].count);
+  const sortedPlatforms = Object.entries(platformCounts).sort((a, b) => b[1] - a[1]);
+  const sortedSources = Object.entries(sourceCounts).sort((a, b) => b[1] - a[1]);
+  const sortedGenres = Object.entries(genreCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const totalPlatforms = sortedPlatforms.reduce((s, [, c]) => s + c, 0);
+  const totalSources = sortedSources.reduce((s, [, c]) => s + c, 0);
+  const totalGenres = sortedGenres.reduce((s, [, c]) => s + c, 0);
+  const topRecommender = sorted[0];
+  const topPlatform = sortedPlatforms[0];
 
-  if (sorted.length === 0) {
+  if (allItems.length === 0) {
     return (
       <div style={{ textAlign: "center", color: "gray", padding: "40px 0" }}>
         <div style={{ fontSize: "40px", marginBottom: "12px" }}>📊</div>
-        <p>Add some titles with recommenders to see your social insights!</p>
+        <p>Add some titles to see your insights!</p>
       </div>
     );
   }
 
   return (
     <div>
-      <h2 style={{ fontSize: "20px", fontWeight: "bold", marginBottom: "16px" }}>📊 Your Ripple Insights</h2>
+      <h2 style={{ fontSize: "22px", fontWeight: "800", marginBottom: "4px" }}>📊 Ripple Insights</h2>
+      <p style={{ color: "gray", fontSize: "13px", marginBottom: "20px" }}>Your personal streaming intelligence</p>
 
-      {(topSource || topPlatform) && (
-        <div style={{ display: "flex", gap: "12px", marginBottom: "24px", flexWrap: "wrap" }}>
-          {topSource && (
-            <div style={{ flex: 1, minWidth: "140px", background: "#f8f9ff", borderRadius: "12px", padding: "16px", border: "1px solid #e0e7ff" }}>
-              <div style={{ fontSize: "11px", color: "gray", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Top Discovery Source</div>
-              <div style={{ fontSize: "20px", fontWeight: "bold", color: "#1A56DB" }}>📱 {topSource[0]}</div>
-              <div style={{ fontSize: "12px", color: "gray" }}>{topSource[1]} titles</div>
-            </div>
-          )}
-          {topPlatform && (
-            <div style={{ flex: 1, minWidth: "140px", background: "#f8fff8", borderRadius: "12px", padding: "16px", border: "1px solid #d1fae5" }}>
-              <div style={{ fontSize: "11px", color: "gray", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Top Streaming Platform</div>
-              <div style={{ fontSize: "20px", fontWeight: "bold", color: "#065F46" }}>🎬 {topPlatform[0]}</div>
-              <div style={{ fontSize: "12px", color: "gray" }}>{topPlatform[1]} titles</div>
-            </div>
-          )}
+      {/* Stat Cards */}
+      <div style={{ display: "flex", gap: "10px", marginBottom: "24px", flexWrap: "wrap" }}>
+        <StatCard emoji="🎬" label="In Queue" value={queue.length} color="#1A56DB" />
+        <StatCard emoji="✅" label="Watched" value={watched.length} color="#065F46" />
+        {topRecommender && <StatCard emoji="👑" label="Top Recommender" value={topRecommender[0]} sub={`${topRecommender[1].count} picks`} color="#7C3AED" />}
+        {topPlatform && <StatCard emoji="📺" label="Top Platform" value={topPlatform[0]} sub={`${topPlatform[1]} titles`} color="#B45309" />}
+      </div>
+
+      {/* Platform Breakdown */}
+      {sortedPlatforms.length > 0 && (
+        <div style={{ background: "#fff", borderRadius: "14px", padding: "20px", border: "1px solid #eee", marginBottom: "16px", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
+          <h3 style={{ fontSize: "15px", fontWeight: "700", marginBottom: "16px" }}>📺 Platform Breakdown</h3>
+          <BarChart data={sortedPlatforms} colorMap={PLATFORM_BAR_COLORS} total={totalPlatforms} />
         </div>
       )}
 
-      <h3 style={{ fontSize: "16px", fontWeight: "bold", marginBottom: "12px", color: "#111" }}>👥 Who's Recommending You</h3>
-
-      {sorted.map(([name, data]) => (
-        <div key={name} style={{ padding: "16px", borderRadius: "12px", border: "1px solid #eee", marginBottom: "12px", background: "#fafafa" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-            <div style={{ fontWeight: "bold", fontSize: "16px" }}>👤 {name}</div>
-            <div style={{ fontSize: "13px", color: "gray" }}>{data.count} recommendation{data.count > 1 ? "s" : ""}</div>
-          </div>
-
-          {Object.keys(data.sources).length > 0 && (
-            <div style={{ marginBottom: "6px" }}>
-              <span style={{ fontSize: "12px", color: "gray" }}>Sends from: </span>
-              {Object.entries(data.sources).map(([src, count]) => (
-                <span key={src} style={{ fontSize: "12px", background: "#e0e7ff", color: "#3730a3", padding: "2px 8px", borderRadius: "10px", marginRight: "4px" }}>
-                  📱 {src} ({count})
-                </span>
-              ))}
-            </div>
-          )}
-
-          {Object.keys(data.platforms).length > 0 && (
-            <div>
-              <span style={{ fontSize: "12px", color: "gray" }}>Their picks stream on: </span>
-              {Object.entries(data.platforms).sort((a, b) => b[1] - a[1]).map(([platform, count]) => (
-                <span key={platform} style={{
-                  fontSize: "11px",
-                  fontWeight: "bold",
-                  padding: "2px 8px",
-                  borderRadius: "10px",
-                  marginRight: "4px",
-                  background: PLATFORM_COLORS[platform]?.bg || "#333",
-                  color: PLATFORM_COLORS[platform]?.color || "#fff"
-                }}>
-                  {platform} ({count})
-                </span>
-              ))}
-            </div>
-          )}
+      {/* Source Breakdown */}
+      {sortedSources.length > 0 && (
+        <div style={{ background: "#fff", borderRadius: "14px", padding: "20px", border: "1px solid #eee", marginBottom: "16px", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
+          <h3 style={{ fontSize: "15px", fontWeight: "700", marginBottom: "16px" }}>📱 Where You Discover</h3>
+          <BarChart data={sortedSources} colorMap={SOURCE_COLORS} total={totalSources} />
         </div>
-      ))}
+      )}
+
+      {/* Genre Breakdown */}
+      {sortedGenres.length > 0 && (
+        <div style={{ background: "#fff", borderRadius: "14px", padding: "20px", border: "1px solid #eee", marginBottom: "16px", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
+          <h3 style={{ fontSize: "15px", fontWeight: "700", marginBottom: "16px" }}>🎭 Your Taste Profile</h3>
+          <BarChart data={sortedGenres} total={totalGenres} />
+        </div>
+      )}
+
+      {/* Recommender Cards */}
+      {sorted.length > 0 && (
+        <div style={{ background: "#fff", borderRadius: "14px", padding: "20px", border: "1px solid #eee", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
+          <h3 style={{ fontSize: "15px", fontWeight: "700", marginBottom: "16px" }}>👥 Your Recommendation Network</h3>
+          {sorted.map(([name, data], index) => (
+            <div key={name} style={{ padding: "14px", borderRadius: "12px", border: "1px solid #f1f1f1", marginBottom: "10px", background: index === 0 ? "#fdfaff" : "#fafafa" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                <div style={{ fontWeight: "700", fontSize: "15px" }}>
+                  {index === 0 ? "👑" : "👤"} {name}
+                </div>
+                <div style={{ fontSize: "12px", background: "#f1f1f1", padding: "2px 10px", borderRadius: "20px", color: "#333" }}>
+                  {data.count} pick{data.count > 1 ? "s" : ""}
+                </div>
+              </div>
+
+              {/* Progress bar relative to top recommender */}
+              <div style={{ background: "#f1f1f1", borderRadius: "99px", height: "6px", marginBottom: "10px", overflow: "hidden" }}>
+                <div style={{
+                  width: `${(data.count / sorted[0][1].count) * 100}%`,
+                  height: "100%",
+                  borderRadius: "99px",
+                  background: index === 0 ? "#7C3AED" : "#1A56DB"
+                }} />
+              </div>
+
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                {Object.keys(data.sources).length > 0 && Object.entries(data.sources).map(([src]) => (
+                  <span key={src} style={{
+                    fontSize: "11px", padding: "2px 8px", borderRadius: "10px",
+                    background: SOURCE_COLORS[src] || "#e0e7ff",
+                    color: src === "Snapchat" ? "#000" : "#fff",
+                    fontWeight: "600"
+                  }}>
+                    📱 {src}
+                  </span>
+                ))}
+                {Object.entries(data.platforms).sort((a, b) => b[1] - a[1]).map(([platform, count]) => (
+                  <span key={platform} style={{
+                    fontSize: "11px", fontWeight: "700", padding: "2px 8px", borderRadius: "10px",
+                    background: PLATFORM_COLORS[platform]?.bg || "#333",
+                    color: PLATFORM_COLORS[platform]?.color || "#fff"
+                  }}>
+                    {platform} ×{count}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -403,7 +487,7 @@ function App() {
       </div>
 
       {tab === "insights" ? (
-        <InsightsTab allItems={allItems} providers={providers} />
+        <InsightsTab allItems={allItems} providers={providers} queue={queue} watched={watched} />
       ) : (
         Object.entries(grouped).map(([genre, items]) => (
           <div key={genre} style={{ marginBottom: "32px" }}>
