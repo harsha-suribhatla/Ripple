@@ -11,6 +11,7 @@ const supabase = createClient(
 
 const D = {
   bg: "#0f0f0f",
+  sidebar: "#111",
   card: "#1a1a1a",
   card2: "#222",
   border: "#2a2a2a",
@@ -125,10 +126,7 @@ async function fetchProviders(tmdbId, mediaType) {
   const platforms = [];
   for (let p of usProviders) {
     const name = PROVIDER_NAME_MAP[p.provider_id];
-    if (name && !seen.has(name)) {
-      seen.add(name);
-      platforms.push(name);
-    }
+    if (name && !seen.has(name)) { seen.add(name); platforms.push(name); }
   }
   return platforms;
 }
@@ -147,9 +145,7 @@ function LoginScreen() {
   const handleLogin = async () => {
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: {
-        redirectTo: window.location.origin
-      }
+      options: { redirectTo: window.location.origin }
     });
   };
 
@@ -161,17 +157,7 @@ function LoginScreen() {
         <p style={{ color: D.muted, fontSize: "16px", marginBottom: "40px", lineHeight: "1.5" }}>
           Your social streaming queue. Save anything, find where to watch it, discover what's next.
         </p>
-        <button
-          onClick={handleLogin}
-          style={{
-            display: "flex", alignItems: "center", justifyContent: "center", gap: "12px",
-            width: "100%", padding: "14px 24px",
-            background: "#fff", color: "#111",
-            border: "none", borderRadius: "12px",
-            fontSize: "16px", fontWeight: "700",
-            cursor: "pointer",
-          }}
-        >
+        <button onClick={handleLogin} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "12px", width: "100%", padding: "14px 24px", background: "#fff", color: "#111", border: "none", borderRadius: "12px", fontSize: "16px", fontWeight: "700", cursor: "pointer" }}>
           <svg width="20" height="20" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
             <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
@@ -180,9 +166,74 @@ function LoginScreen() {
           </svg>
           Continue with Google
         </button>
-        <p style={{ color: D.muted, fontSize: "12px", marginTop: "20px" }}>
-          Your queue is private and only visible to you.
-        </p>
+        <p style={{ color: D.muted, fontSize: "12px", marginTop: "20px" }}>Your queue is private and only visible to you.</p>
+      </div>
+    </div>
+  );
+}
+
+function Sidebar({ tab, setTab, queue, watched, user }) {
+  const navItems = [
+    { id: "queue", icon: "🎬", label: "Queue", count: queue.length },
+    { id: "watched", icon: "✅", label: "Watched", count: watched.length },
+    { id: "insights", icon: "📊", label: "Insights" },
+  ];
+
+  return (
+    <div style={{
+      width: "220px", minHeight: "100vh", background: D.sidebar,
+      borderRight: `1px solid ${D.border}`,
+      display: "flex", flexDirection: "column",
+      position: "fixed", left: 0, top: 0, bottom: 0,
+      fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    }}>
+      <div style={{ padding: "28px 20px 20px" }}>
+        <div style={{ fontSize: "22px", fontWeight: "900", color: D.text, letterSpacing: "-0.5px" }}>Ripple 🎬</div>
+        <div style={{ fontSize: "12px", color: D.muted, marginTop: "4px" }}>
+          {user?.user_metadata?.full_name?.split(" ")[0] || "Hey there"} 👋
+        </div>
+      </div>
+
+      <div style={{ padding: "0 12px", flex: 1 }}>
+        {navItems.map(item => (
+          <button
+            key={item.id}
+            onClick={() => setTab(item.id)}
+            style={{
+              width: "100%", display: "flex", alignItems: "center", gap: "10px",
+              padding: "10px 12px", borderRadius: "10px", border: "none",
+              background: tab === item.id ? D.accentDim : "transparent",
+              color: tab === item.id ? D.accent : D.muted,
+              cursor: "pointer", fontSize: "14px", fontWeight: tab === item.id ? "700" : "500",
+              marginBottom: "4px", textAlign: "left",
+            }}
+          >
+            <span style={{ fontSize: "16px" }}>{item.icon}</span>
+            <span style={{ flex: 1 }}>{item.label}</span>
+            {item.count !== undefined && (
+              <span style={{
+                fontSize: "11px", background: tab === item.id ? D.accent : D.border,
+                color: tab === item.id ? "#fff" : D.muted,
+                padding: "1px 7px", borderRadius: "20px", fontWeight: "700"
+              }}>{item.count}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ padding: "20px 12px", borderTop: `1px solid ${D.border}` }}>
+        {user?.user_metadata?.avatar_url && (
+          <img src={user.user_metadata.avatar_url} alt="avatar" style={{ width: "32px", height: "32px", borderRadius: "50%", marginBottom: "10px" }} />
+        )}
+        <div style={{ fontSize: "12px", color: D.muted, marginBottom: "8px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {user?.email}
+        </div>
+        <button
+          onClick={() => supabase.auth.signOut()}
+          style={{ width: "100%", padding: "8px", borderRadius: "8px", background: D.card2, border: `1px solid ${D.border}`, color: D.muted, cursor: "pointer", fontSize: "12px" }}
+        >
+          Sign out
+        </button>
       </div>
     </div>
   );
@@ -210,13 +261,7 @@ function BarChart({ data, colorMap, total }) {
             <span style={{ color: D.muted }}>{count} ({Math.round((count / total) * 100)}%)</span>
           </div>
           <div style={{ background: D.border, borderRadius: "99px", height: "6px", overflow: "hidden" }}>
-            <div style={{
-              width: `${(count / total) * 100}%`,
-              height: "100%",
-              borderRadius: "99px",
-              background: colorMap?.[name] || D.accent,
-              transition: "width 0.5s ease"
-            }} />
+            <div style={{ width: `${(count / total) * 100}%`, height: "100%", borderRadius: "99px", background: colorMap?.[name] || D.accent, transition: "width 0.5s ease" }} />
           </div>
         </div>
       ))}
@@ -258,10 +303,7 @@ function InsightsTab({ allItems, providers, queue, watched }) {
   const topRecommender = sorted[0];
   const topPlatform = sortedPlatforms[0];
 
-  const sectionStyle = {
-    background: D.card, borderRadius: "14px", padding: "20px",
-    border: `1px solid ${D.border}`, marginBottom: "14px",
-  };
+  const sectionStyle = { background: D.card, borderRadius: "14px", padding: "20px", border: `1px solid ${D.border}`, marginBottom: "14px" };
 
   return (
     <div>
@@ -302,21 +344,15 @@ function InsightsTab({ allItems, providers, queue, watched }) {
           {sorted.map(([name, data], index) => (
             <div key={name} style={{ padding: "14px", borderRadius: "12px", border: `1px solid ${D.border}`, marginBottom: "10px", background: index === 0 ? "#1c1a2e" : D.card2 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                <div style={{ fontWeight: "700", fontSize: "15px", color: D.text }}>
-                  {index === 0 ? "👑" : "👤"} {name}
-                </div>
-                <div style={{ fontSize: "12px", background: D.border, padding: "2px 10px", borderRadius: "20px", color: D.muted }}>
-                  {data.count} pick{data.count > 1 ? "s" : ""}
-                </div>
+                <div style={{ fontWeight: "700", fontSize: "15px", color: D.text }}>{index === 0 ? "👑" : "👤"} {name}</div>
+                <div style={{ fontSize: "12px", background: D.border, padding: "2px 10px", borderRadius: "20px", color: D.muted }}>{data.count} pick{data.count > 1 ? "s" : ""}</div>
               </div>
               <div style={{ background: D.border, borderRadius: "99px", height: "5px", marginBottom: "10px", overflow: "hidden" }}>
                 <div style={{ width: `${(data.count / sorted[0][1].count) * 100}%`, height: "100%", borderRadius: "99px", background: index === 0 ? D.purple : D.accent }} />
               </div>
               <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                 {Object.entries(data.sources).map(([src]) => (
-                  <span key={src} style={{ fontSize: "11px", padding: "2px 8px", borderRadius: "10px", background: SOURCE_COLORS[src] || D.accentDim, color: src === "Snapchat" ? "#000" : "#fff", fontWeight: "600" }}>
-                    📱 {src}
-                  </span>
+                  <span key={src} style={{ fontSize: "11px", padding: "2px 8px", borderRadius: "10px", background: SOURCE_COLORS[src] || D.accentDim, color: src === "Snapchat" ? "#000" : "#fff", fontWeight: "600" }}>📱 {src}</span>
                 ))}
                 {Object.entries(data.platforms).sort((a, b) => b[1] - a[1]).map(([platform, count]) => (
                   <span key={platform} style={{ fontSize: "11px", fontWeight: "700", padding: "2px 8px", borderRadius: "10px", background: PLATFORM_COLORS[platform]?.bg || D.card2, color: PLATFORM_COLORS[platform]?.color || D.text, border: `1px solid ${PLATFORM_COLORS[platform]?.border || D.border}` }}>
@@ -351,11 +387,9 @@ function App() {
       setUser(session?.user ?? null);
       setAuthLoading(false);
     });
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
     });
-
     return () => subscription.unsubscribe();
   }, []);
 
@@ -364,11 +398,7 @@ function App() {
   }, [user]);
 
   async function loadQueue() {
-    const { data } = await supabase
-      .from("queue")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
+    const { data } = await supabase.from("queue").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
     if (data) {
       setAllItems(data);
       setQueue(data.filter(i => !i.watched));
@@ -394,17 +424,13 @@ function App() {
     let title = input;
     if (input.startsWith("http")) {
       const res = await fetch("http://127.0.0.1:8000/extract", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: input })
       });
       const data = await res.json();
       if (data.title && data.title !== "UNKNOWN") title = data.title;
     }
-    const response = await fetch(
-      `https://api.themoviedb.org/3/search/multi?query=${title}`,
-      { headers: { Authorization: `Bearer ${TMDB_TOKEN}` } }
-    );
+    const response = await fetch(`https://api.themoviedb.org/3/search/multi?query=${title}`, { headers: { Authorization: `Bearer ${TMDB_TOKEN}` } });
     const tmdbData = await response.json();
     const result = tmdbData.results[0];
     const genre = getGenre(result?.genre_ids);
@@ -412,18 +438,14 @@ function App() {
       title: result?.title || result?.name || title,
       description: result?.overview || "No info found",
       poster: result?.poster_path ? `https://image.tmdb.org/t/p/w200${result.poster_path}` : null,
-      recommender,
-      watched: false,
-      genre,
+      recommender, watched: false, genre,
       tmdb_id: result?.id || null,
       media_type: result?.media_type || null,
       user_id: user.id,
     };
     await supabase.from("queue").insert([item]);
     await loadQueue();
-    setInput("");
-    setRecommender("");
-    setLoading(false);
+    setInput(""); setRecommender(""); setLoading(false);
   }
 
   async function markWatched(item) {
@@ -452,12 +474,8 @@ function App() {
       title: s.title || s.name,
       description: s.overview || "No info found",
       poster: s.poster_path ? `https://image.tmdb.org/t/p/w200${s.poster_path}` : null,
-      recommender: "Ripple",
-      watched: false,
-      genre,
-      tmdb_id: s.id,
-      media_type: mediaType,
-      user_id: user.id,
+      recommender: "Ripple", watched: false, genre,
+      tmdb_id: s.id, media_type: mediaType, user_id: user.id,
     };
     await supabase.from("queue").insert([item]);
     await loadQueue();
@@ -481,34 +499,13 @@ function App() {
     return acc;
   }, {});
 
-  const tabBtn = (id, label) => (
-    <button
-      onClick={() => setTab(id)}
-      style={{
-        padding: "8px 20px", borderRadius: "20px", border: "none", cursor: "pointer",
-        background: tab === id ? D.accent : D.card,
-        color: tab === id ? "#fff" : D.muted,
-        fontWeight: "bold", fontSize: "14px",
-      }}
-    >{label}</button>
-  );
-
   return (
-    <div style={{ minHeight: "100vh", background: D.bg }}>
-      <div style={{ maxWidth: "620px", margin: "0 auto", padding: "40px 20px", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: D.bg, display: "flex", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+      <Sidebar tab={tab} setTab={setTab} queue={queue} watched={watched} user={user} />
 
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "32px" }}>
-          <div>
-            <h1 style={{ fontSize: "32px", fontWeight: "900", color: D.text, marginBottom: "4px", letterSpacing: "-0.5px" }}>Ripple 🎬</h1>
-            <p style={{ color: D.muted, fontSize: "14px" }}>Hey {user.user_metadata?.full_name?.split(" ")[0] || "there"} 👋</p>
-          </div>
-          <button
-            onClick={() => supabase.auth.signOut()}
-            style={{ padding: "8px 16px", borderRadius: "10px", background: D.card, border: `1px solid ${D.border}`, color: D.muted, cursor: "pointer", fontSize: "13px" }}
-          >Sign out</button>
-        </div>
+      <div style={{ marginLeft: "220px", flex: 1, padding: "40px", maxWidth: "700px" }}>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "28px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "32px" }}>
           <input
             placeholder="Paste a URL or type a title..."
             value={input}
@@ -527,12 +524,6 @@ function App() {
           >
             {loading ? "Adding..." : "+ Add to Queue"}
           </button>
-        </div>
-
-        <div style={{ display: "flex", gap: "8px", marginBottom: "24px", flexWrap: "wrap" }}>
-          {tabBtn("queue", `Queue (${queue.length})`)}
-          {tabBtn("watched", `Watched (${watched.length})`)}
-          {tabBtn("insights", "📊 Insights")}
         </div>
 
         {tab === "insights" ? (
@@ -574,41 +565,40 @@ function App() {
             </div>
           ))
         )}
-
-        {modal && (
-          <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-            <div style={{ background: D.card, borderRadius: "16px", padding: "28px", maxWidth: "500px", width: "90%", maxHeight: "80vh", overflowY: "auto", border: `1px solid ${D.border}` }}>
-              <h2 style={{ fontSize: "18px", marginBottom: "4px", color: D.text }}>✅ Marked as Watched!</h2>
-              <p style={{ color: D.muted, marginBottom: "20px", fontSize: "13px" }}>Since you watched <strong style={{ color: D.text }}>{modal.watchedTitle}</strong>, you might also like:</p>
-              {modal.similar.map((s) => (
-                <div key={s.id} style={{ display: "flex", gap: "12px", padding: "12px", borderRadius: "10px", border: `1px solid ${D.border}`, marginBottom: "10px", alignItems: "flex-start", background: D.card2 }}>
-                  {s.poster_path && <img src={`https://image.tmdb.org/t/p/w200${s.poster_path}`} alt={s.title || s.name} style={{ width: "46px", borderRadius: "6px" }} />}
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: "700", fontSize: "14px", color: D.text }}>{s.title || s.name}</div>
-                    <div style={{ fontSize: "11px", color: D.muted, margin: "3px 0" }}>{s.overview?.slice(0, 70)}...</div>
-                    {similarProviders[s.id] && similarProviders[s.id].length > 0 && (
-                      <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", marginTop: "4px" }}>
-                        {similarProviders[s.id].map(platform => (
-                          <span key={platform} style={{ padding: "2px 7px", borderRadius: "6px", fontSize: "10px", fontWeight: "700", background: PLATFORM_COLORS[platform]?.bg || D.card2, color: PLATFORM_COLORS[platform]?.color || D.text, border: `1px solid ${PLATFORM_COLORS[platform]?.border || D.border}` }}>
-                            {platform}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <button onClick={() => addSimilarToQueue(s, modal.mediaType)} style={{ padding: "6px 10px", borderRadius: "8px", background: D.accent, color: "#fff", border: "none", cursor: "pointer", fontSize: "12px", whiteSpace: "nowrap", fontWeight: "700" }}>
-                    + Add
-                  </button>
-                </div>
-              ))}
-              <button onClick={() => setModal(null)} style={{ width: "100%", padding: "12px", borderRadius: "10px", background: D.card2, border: `1px solid ${D.border}`, cursor: "pointer", fontSize: "14px", color: D.muted, marginTop: "8px" }}>
-                Close
-              </button>
-            </div>
-          </div>
-        )}
-
       </div>
+
+      {modal && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+          <div style={{ background: D.card, borderRadius: "16px", padding: "28px", maxWidth: "500px", width: "90%", maxHeight: "80vh", overflowY: "auto", border: `1px solid ${D.border}` }}>
+            <h2 style={{ fontSize: "18px", marginBottom: "4px", color: D.text }}>✅ Marked as Watched!</h2>
+            <p style={{ color: D.muted, marginBottom: "20px", fontSize: "13px" }}>Since you watched <strong style={{ color: D.text }}>{modal.watchedTitle}</strong>, you might also like:</p>
+            {modal.similar.map((s) => (
+              <div key={s.id} style={{ display: "flex", gap: "12px", padding: "12px", borderRadius: "10px", border: `1px solid ${D.border}`, marginBottom: "10px", alignItems: "flex-start", background: D.card2 }}>
+                {s.poster_path && <img src={`https://image.tmdb.org/t/p/w200${s.poster_path}`} alt={s.title || s.name} style={{ width: "46px", borderRadius: "6px" }} />}
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: "700", fontSize: "14px", color: D.text }}>{s.title || s.name}</div>
+                  <div style={{ fontSize: "11px", color: D.muted, margin: "3px 0" }}>{s.overview?.slice(0, 70)}...</div>
+                  {similarProviders[s.id] && similarProviders[s.id].length > 0 && (
+                    <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", marginTop: "4px" }}>
+                      {similarProviders[s.id].map(platform => (
+                        <span key={platform} style={{ padding: "2px 7px", borderRadius: "6px", fontSize: "10px", fontWeight: "700", background: PLATFORM_COLORS[platform]?.bg || D.card2, color: PLATFORM_COLORS[platform]?.color || D.text, border: `1px solid ${PLATFORM_COLORS[platform]?.border || D.border}` }}>
+                          {platform}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <button onClick={() => addSimilarToQueue(s, modal.mediaType)} style={{ padding: "6px 10px", borderRadius: "8px", background: D.accent, color: "#fff", border: "none", cursor: "pointer", fontSize: "12px", whiteSpace: "nowrap", fontWeight: "700" }}>
+                  + Add
+                </button>
+              </div>
+            ))}
+            <button onClick={() => setModal(null)} style={{ width: "100%", padding: "12px", borderRadius: "10px", background: D.card2, border: `1px solid ${D.border}`, cursor: "pointer", fontSize: "14px", color: D.muted, marginTop: "8px" }}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
