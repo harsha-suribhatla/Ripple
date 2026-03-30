@@ -70,7 +70,8 @@ const PLATFORM_BAR_COLORS = {
 
 const SOURCE_COLORS = {
   "TikTok": "#ff0050", "YouTube": "#FF0000", "Instagram": "#E1306C",
-  "Twitter": "#1DA1F2", "Reddit": "#FF4500", "Snapchat": "#FFFC00", "Facebook": "#1877F2",
+  "Twitter": "#1DA1F2", "Reddit": "#FF4500", "Snapchat": "#FFFC00",
+  "Facebook": "#1877F2", "Direct": "#4f8ef7", "Link": "#888", "Friend": "#a78bfa",
 };
 
 const PROVIDER_NAME_MAP = {
@@ -88,6 +89,18 @@ function detectSource(recommender) {
     if (lower.includes(s)) return s.charAt(0).toUpperCase() + s.slice(1);
   }
   return null;
+}
+
+function detectUrlSource(input) {
+  if (!input.startsWith("http")) return "Friend";
+  if (input.includes("tiktok.com")) return "TikTok";
+  if (input.includes("youtube.com") || input.includes("youtu.be")) return "YouTube";
+  if (input.includes("instagram.com")) return "Instagram";
+  if (input.includes("twitter.com") || input.includes("x.com")) return "Twitter";
+  if (input.includes("reddit.com")) return "Reddit";
+  if (input.includes("facebook.com")) return "Facebook";
+  if (input.includes("snapchat.com")) return "Snapchat";
+  return "Link";
 }
 
 async function fetchProviders(tmdbId, mediaType) {
@@ -312,9 +325,7 @@ function DiscoverTab({ onAddToQueue }) {
     <div style={{ maxWidth: "640px", margin: "0 auto" }}>
       <h2 style={{ fontSize: "22px", fontWeight: "800", marginBottom: "4px", color: D.text }}>🔍 Discover</h2>
       <p style={{ color: D.muted, fontSize: "13px", marginBottom: "28px" }}>Describe a movie, drop an image, or browse what's trending</p>
-
       <ConveyorBelt onSelect={handleBeltSelect} />
-
       <div
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
@@ -340,7 +351,6 @@ function DiscoverTab({ onAddToQueue }) {
           </div>
         )}
       </div>
-
       <div style={{ display: "flex", gap: "10px", marginBottom: "24px" }}>
         <input
           placeholder='Describe it... "the one with the guy who sees dead people"'
@@ -354,7 +364,6 @@ function DiscoverTab({ onAddToQueue }) {
           {aiLoading ? "..." : "Find it"}
         </button>
       </div>
-
       {result && (
         <div style={{ background: D.card, borderRadius: "14px", border: `1px solid ${D.border}`, padding: "20px", display: "flex", gap: "16px", alignItems: "flex-start" }}>
           {result.poster_path && <img src={`https://image.tmdb.org/t/p/w200${result.poster_path}`} alt={result.title || result.name} style={{ width: "80px", borderRadius: "8px", flexShrink: 0 }} />}
@@ -413,21 +422,23 @@ function BarChart({ data, colorMap, total }) {
 
 function InsightsTab({ allItems, providers, queue, watched }) {
   const peopleMap = {};
-  const sourceCounts = {};
   const platformCounts = {};
   const genreCounts = {};
+  const sourceCounts = {};
 
   for (let item of allItems) {
     if (item.genre) genreCounts[item.genre] = (genreCounts[item.genre] || 0) + 1;
+
+    // Count actual URL sources from the source column
+    if (item.source) {
+      sourceCounts[item.source] = (sourceCounts[item.source] || 0) + 1;
+    }
+
     if (!item.recommender || item.recommender === "Ripple") continue;
     const name = item.recommender;
-    if (!peopleMap[name]) peopleMap[name] = { count: 0, sources: {}, platforms: {} };
+    if (!peopleMap[name]) peopleMap[name] = { count: 0, platforms: {} };
     peopleMap[name].count++;
-    const source = detectSource(name);
-    if (source) {
-      peopleMap[name].sources[source] = (peopleMap[name].sources[source] || 0) + 1;
-      sourceCounts[source] = (sourceCounts[source] || 0) + 1;
-    }
+
     const itemPlatforms = providers[item.id] || [];
     for (let p of itemPlatforms) {
       peopleMap[name].platforms[p] = (peopleMap[name].platforms[p] || 0) + 1;
@@ -444,21 +455,44 @@ function InsightsTab({ allItems, providers, queue, watched }) {
   const totalGenres = sortedGenres.reduce((s, [, c]) => s + c, 0);
   const topRecommender = sorted[0];
   const topPlatform = sortedPlatforms[0];
+  const topSource = sortedSources[0];
   const sectionStyle = { background: D.card, borderRadius: "14px", padding: "20px", border: `1px solid ${D.border}`, marginBottom: "14px" };
 
   return (
     <div style={{ maxWidth: "640px", margin: "0 auto" }}>
       <h2 style={{ fontSize: "22px", fontWeight: "800", marginBottom: "4px", color: D.text }}>📊 Ripple Insights</h2>
       <p style={{ color: D.muted, fontSize: "13px", marginBottom: "20px" }}>Your personal streaming intelligence</p>
+
       <div style={{ display: "flex", gap: "10px", marginBottom: "14px", flexWrap: "wrap" }}>
         <StatCard emoji="🎬" label="In Queue" value={queue.length} color={D.accent} />
         <StatCard emoji="✅" label="Watched" value={watched.length} color={D.green} />
         {topRecommender && <StatCard emoji="👑" label="Top Recommender" value={topRecommender[0]} sub={`${topRecommender[1].count} picks`} color={D.purple} />}
         {topPlatform && <StatCard emoji="📺" label="Top Platform" value={topPlatform[0]} sub={`${topPlatform[1]} titles`} color="#f59e0b" />}
+        {topSource && <StatCard emoji="📡" label="Top Source" value={topSource[0]} sub={`${topSource[1]} titles`} color="#ff0050" />}
       </div>
-      {sortedPlatforms.length > 0 && <div style={sectionStyle}><h3 style={{ fontSize: "14px", fontWeight: "700", marginBottom: "16px", color: D.text }}>📺 Platform Breakdown</h3><BarChart data={sortedPlatforms} colorMap={PLATFORM_BAR_COLORS} total={totalPlatforms} /></div>}
-      {sortedSources.length > 0 && <div style={sectionStyle}><h3 style={{ fontSize: "14px", fontWeight: "700", marginBottom: "16px", color: D.text }}>📱 Where You Discover</h3><BarChart data={sortedSources} colorMap={SOURCE_COLORS} total={totalSources} /></div>}
-      {sortedGenres.length > 0 && <div style={sectionStyle}><h3 style={{ fontSize: "14px", fontWeight: "700", marginBottom: "16px", color: D.text }}>🎭 Your Taste Profile</h3><BarChart data={sortedGenres} total={totalGenres} /></div>}
+
+      {sortedSources.length > 0 && (
+        <div style={sectionStyle}>
+          <h3 style={{ fontSize: "14px", fontWeight: "700", marginBottom: "4px", color: D.text }}>📡 Where Your Queue Comes From</h3>
+          <p style={{ fontSize: "12px", color: D.muted, marginBottom: "16px" }}>Automatically detected from URLs you paste</p>
+          <BarChart data={sortedSources} colorMap={SOURCE_COLORS} total={totalSources} />
+        </div>
+      )}
+
+      {sortedPlatforms.length > 0 && (
+        <div style={sectionStyle}>
+          <h3 style={{ fontSize: "14px", fontWeight: "700", marginBottom: "16px", color: D.text }}>📺 Platform Breakdown</h3>
+          <BarChart data={sortedPlatforms} colorMap={PLATFORM_BAR_COLORS} total={totalPlatforms} />
+        </div>
+      )}
+
+      {sortedGenres.length > 0 && (
+        <div style={sectionStyle}>
+          <h3 style={{ fontSize: "14px", fontWeight: "700", marginBottom: "16px", color: D.text }}>🎭 Your Taste Profile</h3>
+          <BarChart data={sortedGenres} total={totalGenres} />
+        </div>
+      )}
+
       {sorted.length > 0 && (
         <div style={sectionStyle}>
           <h3 style={{ fontSize: "14px", fontWeight: "700", marginBottom: "16px", color: D.text }}>👥 Your Recommendation Network</h3>
@@ -471,16 +505,15 @@ function InsightsTab({ allItems, providers, queue, watched }) {
               <div style={{ background: D.border, borderRadius: "99px", height: "5px", marginBottom: "10px", overflow: "hidden" }}>
                 <div style={{ width: `${(data.count / sorted[0][1].count) * 100}%`, height: "100%", borderRadius: "99px", background: index === 0 ? D.purple : D.accent }} />
               </div>
-              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                {Object.entries(data.sources).map(([src]) => (
-                  <span key={src} style={{ fontSize: "11px", padding: "2px 8px", borderRadius: "10px", background: SOURCE_COLORS[src] || D.accentDim, color: src === "Snapchat" ? "#000" : "#fff", fontWeight: "600" }}>📱 {src}</span>
-                ))}
-                {Object.entries(data.platforms).sort((a, b) => b[1] - a[1]).map(([platform, count]) => (
-                  <span key={platform} style={{ fontSize: "11px", fontWeight: "700", padding: "2px 8px", borderRadius: "10px", background: PLATFORM_COLORS[platform]?.bg || D.card2, color: PLATFORM_COLORS[platform]?.color || D.text, border: `1px solid ${PLATFORM_COLORS[platform]?.border || D.border}` }}>
-                    {platform} ×{count}
-                  </span>
-                ))}
-              </div>
+              {Object.keys(data.platforms).length > 0 && (
+                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                  {Object.entries(data.platforms).sort((a, b) => b[1] - a[1]).map(([platform, count]) => (
+                    <span key={platform} style={{ fontSize: "11px", fontWeight: "700", padding: "2px 8px", borderRadius: "10px", background: PLATFORM_COLORS[platform]?.bg || D.card2, color: PLATFORM_COLORS[platform]?.color || D.text, border: `1px solid ${PLATFORM_COLORS[platform]?.border || D.border}` }}>
+                      {platform} ×{count}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -541,6 +574,7 @@ function App() {
     if (input === "") return;
     setLoading(true);
     let title = input;
+    const source = detectUrlSource(input);
     if (input.startsWith("http")) {
       const res = await fetch("http://127.0.0.1:8000/extract", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -558,7 +592,8 @@ function App() {
       description: result?.overview || "No info found",
       poster: result?.poster_path ? `https://image.tmdb.org/t/p/w200${result.poster_path}` : null,
       recommender, watched: false, genre,
-      tmdb_id: result?.id || null, media_type: result?.media_type || null, user_id: user.id,
+      tmdb_id: result?.id || null, media_type: result?.media_type || null,
+      user_id: user.id, source,
     };
     await supabase.from("queue").insert([item]);
     await loadQueue();
@@ -572,7 +607,8 @@ function App() {
       description: movie.overview || "No info found",
       poster: movie.poster_path ? `https://image.tmdb.org/t/p/w200${movie.poster_path}` : null,
       recommender: "Ripple", watched: false, genre,
-      tmdb_id: movie.id, media_type: movie.media_type || "movie", user_id: user.id,
+      tmdb_id: movie.id, media_type: movie.media_type || "movie",
+      user_id: user.id, source: "Discover",
     };
     await supabase.from("queue").insert([item]);
     await loadQueue();
@@ -604,7 +640,7 @@ function App() {
       title: s.title || s.name, description: s.overview || "No info found",
       poster: s.poster_path ? `https://image.tmdb.org/t/p/w200${s.poster_path}` : null,
       recommender: "Ripple", watched: false, genre,
-      tmdb_id: s.id, media_type: mediaType, user_id: user.id,
+      tmdb_id: s.id, media_type: mediaType, user_id: user.id, source: "Ripple",
     };
     await supabase.from("queue").insert([item]);
     await loadQueue();
@@ -660,7 +696,8 @@ function App() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: "700", fontSize: "15px", color: D.text, marginBottom: "3px" }}>{item.title}</div>
                       <div style={{ fontSize: "12px", color: D.muted, marginBottom: "6px", lineHeight: "1.4" }}>{item.description?.slice(0, 90)}...</div>
-                      {item.recommender && <div style={{ fontSize: "11px", color: D.accent, marginBottom: "6px" }}>via {item.recommender}</div>}
+                      {item.recommender && item.recommender !== "Ripple" && <div style={{ fontSize: "11px", color: D.accent, marginBottom: "4px" }}>via {item.recommender}</div>}
+                      {item.source && <div style={{ fontSize: "10px", color: D.muted, marginBottom: "6px" }}>from {item.source}</div>}
                       {providers[item.id] && providers[item.id].length > 0 && (
                         <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
                           {providers[item.id].map(platform => (
