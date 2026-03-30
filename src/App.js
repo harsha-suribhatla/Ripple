@@ -81,8 +81,6 @@ const PROVIDER_NAME_MAP = {
   531: "Paramount+", 350: "Apple TV+",
 };
 
-const SOURCE_PLATFORMS = ["tiktok", "youtube", "instagram", "twitter", "reddit", "snapchat", "facebook"];
-
 // User's platforms — in a real app this would be set by the user
 const MY_PLATFORMS = ["Netflix", "Hulu", "Max"];
 
