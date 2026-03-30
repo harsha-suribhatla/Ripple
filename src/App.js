@@ -81,7 +81,6 @@ const PROVIDER_NAME_MAP = {
   531: "Paramount+", 350: "Apple TV+",
 };
 
-// User's platforms — in a real app this would be set by the user
 const MY_PLATFORMS = ["Netflix", "Hulu", "Max"];
 
 function detectUrlSource(input) {
@@ -98,17 +97,12 @@ function detectUrlSource(input) {
 
 function calcRippleScore(item, itemProviders) {
   let score = 0;
-  // Has a recommender = social signal
   if (item.recommender && item.recommender !== "Ripple") score += 30;
-  // Came from social media = higher intent
   const socialSources = ["TikTok", "YouTube", "Instagram", "Twitter", "Reddit"];
   if (socialSources.includes(item.source)) score += 25;
-  // Available on streaming = watchable
   if (itemProviders && itemProviders.length > 0) score += 20;
-  // Available on a popular platform
   if (itemProviders && itemProviders.includes("Netflix")) score += 10;
   if (itemProviders && itemProviders.includes("Peacock")) score += 10;
-  // Has full metadata
   if (item.genre && item.genre !== "Other") score += 5;
   return Math.min(score, 100);
 }
@@ -118,6 +112,13 @@ function getRippleScoreColor(score) {
   if (score >= 60) return "#f59e0b";
   if (score >= 40) return "#4f8ef7";
   return "#888";
+}
+
+function getRippleScoreLabel(score) {
+  if (score >= 80) return "🔥 High buzz";
+  if (score >= 60) return "⚡ Strong signal";
+  if (score >= 40) return "📈 Growing";
+  return "💤 Low signal";
 }
 
 async function fetchProviders(tmdbId, mediaType) {
@@ -240,12 +241,7 @@ function ConveyorBelt({ onSelect }) {
           0% { transform: translateX(0); }
           100% { transform: translateX(-50%); }
         }
-        .conveyor-track {
-          display: flex;
-          gap: 12px;
-          animation: scroll 40s linear infinite;
-          width: max-content;
-        }
+        .conveyor-track { display: flex; gap: 12px; animation: scroll 40s linear infinite; width: max-content; }
         .conveyor-track:hover { animation-play-state: paused; }
       `}</style>
       <div className="conveyor-track" ref={trackRef}>
@@ -269,6 +265,123 @@ function ConveyorBelt({ onSelect }) {
   );
 }
 
+function ItemDetailModal({ item, platforms, onClose, onWatched, onUnwatch, onDelete, onShare, tab }) {
+  const rippleScore = calcRippleScore(item, platforms);
+  const alreadyWatching = platforms.some(p => MY_PLATFORMS.includes(p));
+
+  const scoreBreakdown = [];
+  if (item.recommender && item.recommender !== "Ripple") scoreBreakdown.push({ label: "Friend recommended", points: 30 });
+  const socialSources = ["TikTok", "YouTube", "Instagram", "Twitter", "Reddit"];
+  if (socialSources.includes(item.source)) scoreBreakdown.push({ label: `Found on ${item.source}`, points: 25 });
+  if (platforms.length > 0) scoreBreakdown.push({ label: "Available to stream", points: 20 });
+  if (platforms.includes("Netflix")) scoreBreakdown.push({ label: "On Netflix", points: 10 });
+  if (platforms.includes("Peacock")) scoreBreakdown.push({ label: "On Peacock", points: 10 });
+  if (item.genre && item.genre !== "Other") scoreBreakdown.push({ label: "Genre identified", points: 5 });
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: D.card, borderRadius: "20px", maxWidth: "520px", width: "90%", maxHeight: "85vh", overflowY: "auto", border: `1px solid ${D.border}`, boxShadow: "0 20px 60px rgba(0,0,0,0.6)" }}>
+
+        {/* Header with poster */}
+        <div style={{ position: "relative", borderRadius: "20px 20px 0 0", overflow: "hidden" }}>
+          {item.poster ? (
+            <div style={{ position: "relative" }}>
+              <img src={item.poster} alt={item.title} style={{ width: "100%", height: "220px", objectFit: "cover", display: "block", filter: "brightness(0.4)" }} />
+              <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "24px" }}>
+                <div style={{ display: "flex", alignItems: "flex-end", gap: "16px" }}>
+                  <img src={item.poster} alt={item.title} style={{ width: "80px", borderRadius: "10px", boxShadow: "0 4px 20px rgba(0,0,0,0.5)", flexShrink: 0 }} />
+                  <div>
+                    <div style={{ fontSize: "20px", fontWeight: "900", color: "#fff", lineHeight: "1.2", marginBottom: "6px" }}>{item.title}</div>
+                    <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                      {item.genre && <span style={{ fontSize: "11px", color: D.muted }}>{GENRE_EMOJI[item.genre]} {item.genre}</span>}
+                      {alreadyWatching && <span style={{ fontSize: "11px", background: "#14532d", color: D.green, padding: "1px 8px", borderRadius: "6px", fontWeight: "700" }}>✓ You have it</span>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div style={{ padding: "24px", paddingBottom: "16px" }}>
+              <div style={{ fontSize: "20px", fontWeight: "900", color: D.text }}>{item.title}</div>
+            </div>
+          )}
+        </div>
+
+        <div style={{ padding: "20px 24px 24px" }}>
+
+          {/* Ripple Score */}
+          <div style={{ background: D.card2, borderRadius: "12px", padding: "16px", marginBottom: "16px", border: `1px solid ${D.border}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+              <div>
+                <div style={{ fontSize: "13px", fontWeight: "700", color: D.text }}>⚡ Ripple Score</div>
+                <div style={{ fontSize: "11px", color: D.muted }}>{getRippleScoreLabel(rippleScore)}</div>
+              </div>
+              <div style={{ fontSize: "32px", fontWeight: "900", color: getRippleScoreColor(rippleScore) }}>{rippleScore}</div>
+            </div>
+            <div style={{ background: D.border, borderRadius: "99px", height: "6px", overflow: "hidden", marginBottom: "10px" }}>
+              <div style={{ width: `${rippleScore}%`, height: "100%", borderRadius: "99px", background: getRippleScoreColor(rippleScore), transition: "width 0.5s ease" }} />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+              {scoreBreakdown.map((b, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
+                  <span style={{ color: D.muted }}>{b.label}</span>
+                  <span style={{ color: D.green, fontWeight: "700" }}>+{b.points}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Description */}
+          <div style={{ fontSize: "13px", color: D.muted, lineHeight: "1.6", marginBottom: "16px" }}>
+            {item.description}
+          </div>
+
+          {/* Meta info */}
+          <div style={{ display: "flex", gap: "16px", marginBottom: "16px", flexWrap: "wrap" }}>
+            {item.recommender && item.recommender !== "Ripple" && (
+              <div>
+                <div style={{ fontSize: "10px", color: D.muted, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "2px" }}>Recommended by</div>
+                <div style={{ fontSize: "13px", color: D.accent, fontWeight: "700" }}>{item.recommender}</div>
+              </div>
+            )}
+            {item.source && (
+              <div>
+                <div style={{ fontSize: "10px", color: D.muted, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "2px" }}>Found on</div>
+                <div style={{ fontSize: "13px", color: D.text, fontWeight: "700" }}>{item.source}</div>
+              </div>
+            )}
+          </div>
+
+          {/* Platforms */}
+          {platforms.length > 0 && (
+            <div style={{ marginBottom: "20px" }}>
+              <div style={{ fontSize: "10px", color: D.muted, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "8px" }}>Where to watch</div>
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                {platforms.map(platform => (
+                  <span key={platform} style={{ padding: "4px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: "700", background: PLATFORM_COLORS[platform]?.bg || D.card2, color: PLATFORM_COLORS[platform]?.color || D.text, border: `1px solid ${PLATFORM_COLORS[platform]?.border || D.border}` }}>
+                    {platform}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            {tab === "queue" ? (
+              <button onClick={() => { onWatched(item); onClose(); }} style={{ flex: 1, padding: "10px", borderRadius: "10px", background: "#0f2a1a", color: D.green, border: "1px solid #14532d", cursor: "pointer", fontSize: "13px", fontWeight: "700" }}>✓ Mark Watched</button>
+            ) : (
+              <button onClick={() => { onUnwatch(item.id); onClose(); }} style={{ flex: 1, padding: "10px", borderRadius: "10px", background: D.card2, color: D.muted, border: `1px solid ${D.border}`, cursor: "pointer", fontSize: "13px" }}>↩ Unwatch</button>
+            )}
+            <button onClick={() => onShare(item)} style={{ padding: "10px 16px", borderRadius: "10px", background: D.card2, color: D.muted, border: `1px solid ${D.border}`, cursor: "pointer", fontSize: "13px" }}>↗ Share</button>
+            <button onClick={() => { onDelete(item.id); onClose(); }} style={{ padding: "10px 16px", borderRadius: "10px", background: "#1a0a0a", color: D.red, border: "1px solid #7f1d1d", cursor: "pointer", fontSize: "13px" }}>✕</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DiscoverTab({ onAddToQueue }) {
   const [query, setQuery] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
@@ -287,19 +400,12 @@ function DiscoverTab({ onAddToQueue }) {
       const aiRes = await fetch("http://127.0.0.1:8000/discover", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          query: query || null,
-          image_data: image?.data || null,
-          image_type: image?.type || null,
-        })
+        body: JSON.stringify({ query: query || null, image_data: image?.data || null, image_type: image?.type || null })
       });
       const aiData = await aiRes.json();
       const title = aiData.title?.trim();
       if (!title) { setAiLoading(false); return; }
-      const tmdbRes = await fetch(
-        `https://api.themoviedb.org/3/search/multi?query=${encodeURIComponent(title)}`,
-        { headers: { Authorization: `Bearer ${TMDB_TOKEN}` } }
-      );
+      const tmdbRes = await fetch(`https://api.themoviedb.org/3/search/multi?query=${encodeURIComponent(title)}`, { headers: { Authorization: `Bearer ${TMDB_TOKEN}` } });
       const tmdbData = await tmdbRes.json();
       const movie = tmdbData.results?.[0];
       if (movie) {
@@ -343,12 +449,8 @@ function DiscoverTab({ onAddToQueue }) {
       <h2 style={{ fontSize: "22px", fontWeight: "800", marginBottom: "4px", color: D.text }}>🔍 Discover</h2>
       <p style={{ color: D.muted, fontSize: "13px", marginBottom: "28px" }}>Describe a movie, drop an image, or browse what's trending</p>
       <ConveyorBelt onSelect={handleBeltSelect} />
-      <div
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={handleImageDrop}
-        style={{ background: dragOver ? "#1a2a1a" : D.card, border: `2px dashed ${dragOver ? D.green : D.border}`, borderRadius: "14px", padding: "20px", marginBottom: "12px", transition: "all 0.2s" }}
-      >
+      <div onDragOver={(e) => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={handleImageDrop}
+        style={{ background: dragOver ? "#1a2a1a" : D.card, border: `2px dashed ${dragOver ? D.green : D.border}`, borderRadius: "14px", padding: "20px", marginBottom: "12px", transition: "all 0.2s" }}>
         {image ? (
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <img src={`data:${image.type};base64,${image.data}`} alt="uploaded" style={{ width: "50px", height: "70px", objectFit: "cover", borderRadius: "6px" }} />
@@ -369,13 +471,10 @@ function DiscoverTab({ onAddToQueue }) {
         )}
       </div>
       <div style={{ display: "flex", gap: "10px", marginBottom: "24px" }}>
-        <input
-          placeholder='Describe it... "the one with the guy who sees dead people"'
-          value={query}
+        <input placeholder='Describe it... "the one with the guy who sees dead people"' value={query}
           onChange={(e) => { setQuery(e.target.value); setImage(null); }}
           onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-          style={{ flex: 1, padding: "14px 16px", borderRadius: "10px", border: `1px solid ${D.border}`, background: D.card, color: D.text, fontSize: "14px", outline: "none" }}
-        />
+          style={{ flex: 1, padding: "14px 16px", borderRadius: "10px", border: `1px solid ${D.border}`, background: D.card, color: D.text, fontSize: "14px", outline: "none" }} />
         <button onClick={handleSearch} disabled={aiLoading}
           style={{ padding: "14px 20px", borderRadius: "10px", background: D.accent, color: "#fff", border: "none", fontWeight: "700", cursor: "pointer", fontSize: "14px", whiteSpace: "nowrap" }}>
           {aiLoading ? "..." : "Find it"}
@@ -468,7 +567,6 @@ function InsightsTab({ allItems, providers, queue, watched }) {
   const topPlatform = sortedPlatforms[0];
   const topSource = sortedSources[0];
 
-  // Top Ripple Score items
   const topRipple = [...allItems]
     .map(item => ({ ...item, score: calcRippleScore(item, providers[item.id]) }))
     .sort((a, b) => b.score - a.score)
@@ -480,7 +578,6 @@ function InsightsTab({ allItems, providers, queue, watched }) {
     <div style={{ maxWidth: "640px", margin: "0 auto" }}>
       <h2 style={{ fontSize: "22px", fontWeight: "800", marginBottom: "4px", color: D.text }}>📊 Ripple Insights</h2>
       <p style={{ color: D.muted, fontSize: "13px", marginBottom: "20px" }}>Your personal streaming intelligence</p>
-
       <div style={{ display: "flex", gap: "10px", marginBottom: "14px", flexWrap: "wrap" }}>
         <StatCard emoji="🎬" label="In Queue" value={queue.length} color={D.accent} />
         <StatCard emoji="✅" label="Watched" value={watched.length} color={D.green} />
@@ -488,8 +585,6 @@ function InsightsTab({ allItems, providers, queue, watched }) {
         {topPlatform && <StatCard emoji="📺" label="Top Platform" value={topPlatform[0]} sub={`${topPlatform[1]} titles`} color="#f59e0b" />}
         {topSource && <StatCard emoji="📡" label="Top Source" value={topSource[0]} sub={`${topSource[1]} titles`} color="#ff0050" />}
       </div>
-
-      {/* Ripple Score leaderboard */}
       {topRipple.length > 0 && (
         <div style={sectionStyle}>
           <h3 style={{ fontSize: "14px", fontWeight: "700", marginBottom: "4px", color: D.text }}>⚡ Top Ripple Scores</h3>
@@ -510,7 +605,6 @@ function InsightsTab({ allItems, providers, queue, watched }) {
           ))}
         </div>
       )}
-
       {sortedSources.length > 0 && (
         <div style={sectionStyle}>
           <h3 style={{ fontSize: "14px", fontWeight: "700", marginBottom: "4px", color: D.text }}>📡 Where Your Queue Comes From</h3>
@@ -518,21 +612,18 @@ function InsightsTab({ allItems, providers, queue, watched }) {
           <BarChart data={sortedSources} colorMap={SOURCE_COLORS} total={totalSources} />
         </div>
       )}
-
       {sortedPlatforms.length > 0 && (
         <div style={sectionStyle}>
           <h3 style={{ fontSize: "14px", fontWeight: "700", marginBottom: "16px", color: D.text }}>📺 Platform Breakdown</h3>
           <BarChart data={sortedPlatforms} colorMap={PLATFORM_BAR_COLORS} total={totalPlatforms} />
         </div>
       )}
-
       {sortedGenres.length > 0 && (
         <div style={sectionStyle}>
           <h3 style={{ fontSize: "14px", fontWeight: "700", marginBottom: "16px", color: D.text }}>🎭 Your Taste Profile</h3>
           <BarChart data={sortedGenres} total={totalGenres} />
         </div>
       )}
-
       {sorted.length > 0 && (
         <div style={sectionStyle}>
           <h3 style={{ fontSize: "14px", fontWeight: "700", marginBottom: "16px", color: D.text }}>👥 Your Recommendation Network</h3>
@@ -574,6 +665,7 @@ function App() {
   const [tab, setTab] = useState("discover");
   const [providers, setProviders] = useState({});
   const [modal, setModal] = useState(null);
+  const [detailItem, setDetailItem] = useState(null);
   const [similarProviders, setSimilarProviders] = useState({});
   const [search, setSearch] = useState("");
   const [shareToast, setShareToast] = useState(null);
@@ -729,7 +821,6 @@ function App() {
       <Sidebar tab={tab} setTab={setTab} queue={queue} watched={watched} user={user} />
 
       <div style={{ marginLeft: "220px", flex: 1, padding: "40px 80px" }}>
-
         {tab !== "discover" && tab !== "insights" && (
           <div style={{ maxWidth: "640px", margin: "0 auto 32px" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "16px" }}>
@@ -741,12 +832,8 @@ function App() {
                 {loading ? "Adding..." : "+ Add to Queue"}
               </button>
             </div>
-            <input
-              placeholder="Search your queue..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={{ width: "100%", padding: "10px 16px", borderRadius: "10px", border: `1px solid ${D.border}`, background: D.card2, color: D.text, fontSize: "14px", outline: "none", boxSizing: "border-box" }}
-            />
+            <input placeholder="Search your queue..." value={search} onChange={(e) => setSearch(e.target.value)}
+              style={{ width: "100%", padding: "10px 16px", borderRadius: "10px", border: `1px solid ${D.border}`, background: D.card2, color: D.text, fontSize: "14px", outline: "none", boxSizing: "border-box" }} />
           </div>
         )}
 
@@ -769,7 +856,12 @@ function App() {
                   const rippleScore = calcRippleScore(item, itemPlatforms);
 
                   return (
-                    <div key={item.id} style={{ display: "flex", gap: "14px", padding: "16px", borderRadius: "12px", border: `1px solid ${alreadyWatching ? "#14532d" : D.border}`, marginBottom: "10px", alignItems: "flex-start", background: alreadyWatching ? "#0a1a0a" : D.card }}>
+                    <div key={item.id}
+                      onClick={() => setDetailItem(item)}
+                      style={{ display: "flex", gap: "14px", padding: "16px", borderRadius: "12px", border: `1px solid ${alreadyWatching ? "#14532d" : D.border}`, marginBottom: "10px", alignItems: "flex-start", background: alreadyWatching ? "#0a1a0a" : D.card, cursor: "pointer" }}
+                      onMouseEnter={e => e.currentTarget.style.borderColor = D.accent}
+                      onMouseLeave={e => e.currentTarget.style.borderColor = alreadyWatching ? "#14532d" : D.border}
+                    >
                       {item.poster && <img src={item.poster} alt={item.title} style={{ width: "56px", borderRadius: "6px", flexShrink: 0 }} />}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "3px" }}>
@@ -790,7 +882,7 @@ function App() {
                           </div>
                         )}
                       </div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: "6px", flexShrink: 0 }}>
+                      <div onClick={e => e.stopPropagation()} style={{ display: "flex", flexDirection: "column", gap: "6px", flexShrink: 0 }}>
                         {tab === "queue" ? (
                           <button onClick={() => markWatched(item)} style={{ padding: "7px 12px", borderRadius: "8px", background: "#0f2a1a", color: D.green, border: "1px solid #14532d", cursor: "pointer", fontSize: "12px", fontWeight: "700", whiteSpace: "nowrap" }}>✓ Watched</button>
                         ) : (
@@ -807,6 +899,19 @@ function App() {
           </div>
         )}
       </div>
+
+      {detailItem && (
+        <ItemDetailModal
+          item={detailItem}
+          platforms={providers[detailItem.id] || []}
+          tab={tab}
+          onClose={() => setDetailItem(null)}
+          onWatched={markWatched}
+          onUnwatch={markUnwatched}
+          onDelete={deleteItem}
+          onShare={shareItem}
+        />
+      )}
 
       {shareToast && (
         <div style={{ position: "fixed", bottom: "32px", left: "50%", transform: "translateX(-50%)", background: D.card, border: `1px solid ${D.border}`, borderRadius: "10px", padding: "12px 20px", color: D.text, fontSize: "14px", zIndex: 2000, boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }}>
@@ -845,3 +950,4 @@ function App() {
 }
 
 export default App;
+
