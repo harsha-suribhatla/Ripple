@@ -86,15 +86,6 @@ const SOURCE_PLATFORMS = ["tiktok", "youtube", "instagram", "twitter", "reddit",
 // User's platforms — in a real app this would be set by the user
 const MY_PLATFORMS = ["Netflix", "Hulu", "Max"];
 
-function detectSource(recommender) {
-  if (!recommender) return null;
-  const lower = recommender.toLowerCase();
-  for (let s of SOURCE_PLATFORMS) {
-    if (lower.includes(s)) return s.charAt(0).toUpperCase() + s.slice(1);
-  }
-  return null;
-}
-
 function detectUrlSource(input) {
   if (!input.startsWith("http")) return "Friend";
   if (input.includes("tiktok.com")) return "TikTok";
