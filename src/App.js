@@ -21,6 +21,7 @@ const D = {
   accentDim: "#1a2a4a",
   green: "#22c55e",
   purple: "#a78bfa",
+  red: "#ef4444",
 };
 
 const GENRE_MAP = {
@@ -82,6 +83,9 @@ const PROVIDER_NAME_MAP = {
 
 const SOURCE_PLATFORMS = ["tiktok", "youtube", "instagram", "twitter", "reddit", "snapchat", "facebook"];
 
+// User's platforms — in a real app this would be set by the user
+const MY_PLATFORMS = ["Netflix", "Hulu", "Max"];
+
 function detectSource(recommender) {
   if (!recommender) return null;
   const lower = recommender.toLowerCase();
@@ -101,6 +105,30 @@ function detectUrlSource(input) {
   if (input.includes("facebook.com")) return "Facebook";
   if (input.includes("snapchat.com")) return "Snapchat";
   return "Link";
+}
+
+function calcRippleScore(item, itemProviders) {
+  let score = 0;
+  // Has a recommender = social signal
+  if (item.recommender && item.recommender !== "Ripple") score += 30;
+  // Came from social media = higher intent
+  const socialSources = ["TikTok", "YouTube", "Instagram", "Twitter", "Reddit"];
+  if (socialSources.includes(item.source)) score += 25;
+  // Available on streaming = watchable
+  if (itemProviders && itemProviders.length > 0) score += 20;
+  // Available on a popular platform
+  if (itemProviders && itemProviders.includes("Netflix")) score += 10;
+  if (itemProviders && itemProviders.includes("Peacock")) score += 10;
+  // Has full metadata
+  if (item.genre && item.genre !== "Other") score += 5;
+  return Math.min(score, 100);
+}
+
+function getRippleScoreColor(score) {
+  if (score >= 80) return "#22c55e";
+  if (score >= 60) return "#f59e0b";
+  if (score >= 40) return "#4f8ef7";
+  return "#888";
 }
 
 async function fetchProviders(tmdbId, mediaType) {
@@ -428,17 +456,11 @@ function InsightsTab({ allItems, providers, queue, watched }) {
 
   for (let item of allItems) {
     if (item.genre) genreCounts[item.genre] = (genreCounts[item.genre] || 0) + 1;
-
-    // Count actual URL sources from the source column
-    if (item.source) {
-      sourceCounts[item.source] = (sourceCounts[item.source] || 0) + 1;
-    }
-
+    if (item.source) sourceCounts[item.source] = (sourceCounts[item.source] || 0) + 1;
     if (!item.recommender || item.recommender === "Ripple") continue;
     const name = item.recommender;
     if (!peopleMap[name]) peopleMap[name] = { count: 0, platforms: {} };
     peopleMap[name].count++;
-
     const itemPlatforms = providers[item.id] || [];
     for (let p of itemPlatforms) {
       peopleMap[name].platforms[p] = (peopleMap[name].platforms[p] || 0) + 1;
@@ -456,6 +478,13 @@ function InsightsTab({ allItems, providers, queue, watched }) {
   const topRecommender = sorted[0];
   const topPlatform = sortedPlatforms[0];
   const topSource = sortedSources[0];
+
+  // Top Ripple Score items
+  const topRipple = [...allItems]
+    .map(item => ({ ...item, score: calcRippleScore(item, providers[item.id]) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+
   const sectionStyle = { background: D.card, borderRadius: "14px", padding: "20px", border: `1px solid ${D.border}`, marginBottom: "14px" };
 
   return (
@@ -470,6 +499,28 @@ function InsightsTab({ allItems, providers, queue, watched }) {
         {topPlatform && <StatCard emoji="📺" label="Top Platform" value={topPlatform[0]} sub={`${topPlatform[1]} titles`} color="#f59e0b" />}
         {topSource && <StatCard emoji="📡" label="Top Source" value={topSource[0]} sub={`${topSource[1]} titles`} color="#ff0050" />}
       </div>
+
+      {/* Ripple Score leaderboard */}
+      {topRipple.length > 0 && (
+        <div style={sectionStyle}>
+          <h3 style={{ fontSize: "14px", fontWeight: "700", marginBottom: "4px", color: D.text }}>⚡ Top Ripple Scores</h3>
+          <p style={{ fontSize: "12px", color: D.muted, marginBottom: "16px" }}>Titles with the highest social buzz and streaming availability</p>
+          {topRipple.map((item, i) => (
+            <div key={item.id} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px 0", borderBottom: i < topRipple.length - 1 ? `1px solid ${D.border}` : "none" }}>
+              <div style={{ fontSize: "18px", width: "24px", textAlign: "center" }}>{i === 0 ? "🥇" : i === 1 ? "🥈" : "🥉"}</div>
+              {item.poster && <img src={item.poster} alt={item.title} style={{ width: "36px", borderRadius: "4px", flexShrink: 0 }} />}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: "700", fontSize: "13px", color: D.text }}>{item.title}</div>
+                <div style={{ fontSize: "11px", color: D.muted }}>{item.source || "Direct"}</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: "18px", fontWeight: "900", color: getRippleScoreColor(item.score) }}>{item.score}</div>
+                <div style={{ fontSize: "10px", color: D.muted }}>score</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {sortedSources.length > 0 && (
         <div style={sectionStyle}>
@@ -535,6 +586,8 @@ function App() {
   const [providers, setProviders] = useState({});
   const [modal, setModal] = useState(null);
   const [similarProviders, setSimilarProviders] = useState({});
+  const [search, setSearch] = useState("");
+  const [shareToast, setShareToast] = useState(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -614,6 +667,11 @@ function App() {
     await loadQueue();
   }
 
+  async function deleteItem(id) {
+    await supabase.from("queue").delete().eq("id", id);
+    await loadQueue();
+  }
+
   async function markWatched(item) {
     await supabase.from("queue").update({ watched: true }).eq("id", item.id);
     await loadQueue();
@@ -646,6 +704,19 @@ function App() {
     await loadQueue();
   }
 
+  function shareItem(item) {
+    const text = `You should watch "${item.title}" — added via Ripple 🎬`;
+    const url = `https://ripple-app-ten.vercel.app`;
+    const shareText = `${text}\n${url}`;
+    if (navigator.share) {
+      navigator.share({ title: item.title, text: shareText });
+    } else {
+      navigator.clipboard.writeText(shareText);
+      setShareToast(item.title);
+      setTimeout(() => setShareToast(null), 3000);
+    }
+  }
+
   if (authLoading) {
     return <div style={{ minHeight: "100vh", background: D.bg, display: "flex", alignItems: "center", justifyContent: "center" }}><div style={{ color: D.muted }}>Loading...</div></div>;
   }
@@ -653,7 +724,11 @@ function App() {
   if (!user) return <LoginScreen />;
 
   const activeList = tab === "queue" ? queue : watched;
-  const grouped = activeList.reduce((acc, item) => {
+  const filteredList = search
+    ? activeList.filter(i => i.title?.toLowerCase().includes(search.toLowerCase()))
+    : activeList;
+
+  const grouped = filteredList.reduce((acc, item) => {
     const genre = item.genre || "Other";
     if (!acc[genre]) acc[genre] = [];
     acc[genre].push(item);
@@ -668,7 +743,7 @@ function App() {
 
         {tab !== "discover" && tab !== "insights" && (
           <div style={{ maxWidth: "640px", margin: "0 auto 32px" }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "16px" }}>
               <input placeholder="Paste a URL or type a title..." value={input} onChange={(e) => setInput(e.target.value)}
                 style={{ padding: "14px 16px", borderRadius: "10px", border: `1px solid ${D.border}`, background: D.card, color: D.text, fontSize: "15px", outline: "none" }} />
               <input placeholder="Who recommended it? (e.g. Jake, TikTok)" value={recommender} onChange={(e) => setRecommender(e.target.value)}
@@ -677,6 +752,12 @@ function App() {
                 {loading ? "Adding..." : "+ Add to Queue"}
               </button>
             </div>
+            <input
+              placeholder="Search your queue..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{ width: "100%", padding: "10px 16px", borderRadius: "10px", border: `1px solid ${D.border}`, background: D.card2, color: D.text, fontSize: "14px", outline: "none", boxSizing: "border-box" }}
+            />
           </div>
         )}
 
@@ -685,41 +766,64 @@ function App() {
 
         {(tab === "queue" || tab === "watched") && (
           <div style={{ maxWidth: "640px", margin: "0 auto" }}>
+            {Object.entries(grouped).length === 0 && search && (
+              <div style={{ textAlign: "center", color: D.muted, padding: "40px 0" }}>No results for "{search}"</div>
+            )}
             {Object.entries(grouped).map(([genre, items]) => (
               <div key={genre} style={{ marginBottom: "32px" }}>
                 <h2 style={{ fontSize: "13px", fontWeight: "700", marginBottom: "12px", color: D.muted, textTransform: "uppercase", letterSpacing: "1px" }}>
                   {GENRE_EMOJI[genre] || "🎬"} {genre}
                 </h2>
-                {items.map((item) => (
-                  <div key={item.id} style={{ display: "flex", gap: "14px", padding: "16px", borderRadius: "12px", border: `1px solid ${D.border}`, marginBottom: "10px", alignItems: "flex-start", background: D.card }}>
-                    {item.poster && <img src={item.poster} alt={item.title} style={{ width: "56px", borderRadius: "6px", flexShrink: 0 }} />}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: "700", fontSize: "15px", color: D.text, marginBottom: "3px" }}>{item.title}</div>
-                      <div style={{ fontSize: "12px", color: D.muted, marginBottom: "6px", lineHeight: "1.4" }}>{item.description?.slice(0, 90)}...</div>
-                      {item.recommender && item.recommender !== "Ripple" && <div style={{ fontSize: "11px", color: D.accent, marginBottom: "4px" }}>via {item.recommender}</div>}
-                      {item.source && <div style={{ fontSize: "10px", color: D.muted, marginBottom: "6px" }}>from {item.source}</div>}
-                      {providers[item.id] && providers[item.id].length > 0 && (
-                        <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
-                          {providers[item.id].map(platform => (
-                            <span key={platform} style={{ padding: "2px 8px", borderRadius: "6px", fontSize: "10px", fontWeight: "700", background: PLATFORM_COLORS[platform]?.bg || D.card2, color: PLATFORM_COLORS[platform]?.color || D.text, border: `1px solid ${PLATFORM_COLORS[platform]?.border || D.border}` }}>
-                              {platform}
-                            </span>
-                          ))}
+                {items.map((item) => {
+                  const itemPlatforms = providers[item.id] || [];
+                  const alreadyWatching = itemPlatforms.some(p => MY_PLATFORMS.includes(p));
+                  const rippleScore = calcRippleScore(item, itemPlatforms);
+
+                  return (
+                    <div key={item.id} style={{ display: "flex", gap: "14px", padding: "16px", borderRadius: "12px", border: `1px solid ${alreadyWatching ? "#14532d" : D.border}`, marginBottom: "10px", alignItems: "flex-start", background: alreadyWatching ? "#0a1a0a" : D.card }}>
+                      {item.poster && <img src={item.poster} alt={item.title} style={{ width: "56px", borderRadius: "6px", flexShrink: 0 }} />}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "3px" }}>
+                          <div style={{ fontWeight: "700", fontSize: "15px", color: D.text }}>{item.title}</div>
+                          {alreadyWatching && <span style={{ fontSize: "10px", background: "#14532d", color: D.green, padding: "1px 6px", borderRadius: "6px", fontWeight: "700", whiteSpace: "nowrap" }}>✓ You have it</span>}
+                          <span style={{ fontSize: "10px", fontWeight: "800", color: getRippleScoreColor(rippleScore), marginLeft: "auto" }}>⚡{rippleScore}</span>
                         </div>
-                      )}
+                        <div style={{ fontSize: "12px", color: D.muted, marginBottom: "6px", lineHeight: "1.4" }}>{item.description?.slice(0, 90)}...</div>
+                        {item.recommender && item.recommender !== "Ripple" && <div style={{ fontSize: "11px", color: D.accent, marginBottom: "4px" }}>via {item.recommender}</div>}
+                        {item.source && <div style={{ fontSize: "10px", color: D.muted, marginBottom: "6px" }}>from {item.source}</div>}
+                        {itemPlatforms.length > 0 && (
+                          <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
+                            {itemPlatforms.map(platform => (
+                              <span key={platform} style={{ padding: "2px 8px", borderRadius: "6px", fontSize: "10px", fontWeight: "700", background: PLATFORM_COLORS[platform]?.bg || D.card2, color: PLATFORM_COLORS[platform]?.color || D.text, border: `1px solid ${PLATFORM_COLORS[platform]?.border || D.border}` }}>
+                                {platform}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "6px", flexShrink: 0 }}>
+                        {tab === "queue" ? (
+                          <button onClick={() => markWatched(item)} style={{ padding: "7px 12px", borderRadius: "8px", background: "#0f2a1a", color: D.green, border: "1px solid #14532d", cursor: "pointer", fontSize: "12px", fontWeight: "700", whiteSpace: "nowrap" }}>✓ Watched</button>
+                        ) : (
+                          <button onClick={() => markUnwatched(item.id)} style={{ padding: "7px 12px", borderRadius: "8px", background: D.card2, color: D.muted, border: `1px solid ${D.border}`, cursor: "pointer", fontSize: "12px", whiteSpace: "nowrap" }}>↩ Unwatch</button>
+                        )}
+                        <button onClick={() => shareItem(item)} style={{ padding: "7px 12px", borderRadius: "8px", background: D.card2, color: D.muted, border: `1px solid ${D.border}`, cursor: "pointer", fontSize: "12px", whiteSpace: "nowrap" }}>↗ Share</button>
+                        <button onClick={() => deleteItem(item.id)} style={{ padding: "7px 12px", borderRadius: "8px", background: "#1a0a0a", color: D.red, border: "1px solid #7f1d1d", cursor: "pointer", fontSize: "12px", whiteSpace: "nowrap" }}>✕ Delete</button>
+                      </div>
                     </div>
-                    {tab === "queue" ? (
-                      <button onClick={() => markWatched(item)} style={{ padding: "7px 12px", borderRadius: "8px", background: "#0f2a1a", color: D.green, border: "1px solid #14532d", cursor: "pointer", fontSize: "12px", fontWeight: "700", whiteSpace: "nowrap", flexShrink: 0 }}>✓ Watched</button>
-                    ) : (
-                      <button onClick={() => markUnwatched(item.id)} style={{ padding: "7px 12px", borderRadius: "8px", background: D.card2, color: D.muted, border: `1px solid ${D.border}`, cursor: "pointer", fontSize: "12px", whiteSpace: "nowrap", flexShrink: 0 }}>↩ Unwatch</button>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {shareToast && (
+        <div style={{ position: "fixed", bottom: "32px", left: "50%", transform: "translateX(-50%)", background: D.card, border: `1px solid ${D.border}`, borderRadius: "10px", padding: "12px 20px", color: D.text, fontSize: "14px", zIndex: 2000, boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }}>
+          ✓ Copied share link for <strong>{shareToast}</strong>
+        </div>
+      )}
 
       {modal && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
